@@ -1,0 +1,443 @@
+<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ניהול משימות</title>
+<style>
+  :root{
+    --bg:#f4f5f7; --card:#ffffff; --line:#e3e6ea; --text:#1f2733;
+    --muted:#6b7684; --accent:#2f6f4f; --accent-soft:#e6f0ea;
+    --open:#e8a33d; --progress:#3b82c4; --wait:#8b7fb8; --done:#4a9d6e;
+    --danger:#c14545; --shadow:0 1px 3px rgba(20,30,45,.08);
+  }
+  *{box-sizing:border-box;margin:0;padding:0}
+  body{
+    font-family:'Segoe UI',Arial,sans-serif;background:var(--bg);
+    color:var(--text);line-height:1.5;padding-bottom:40px;
+  }
+  header{
+    background:var(--card);border-bottom:1px solid var(--line);
+    padding:14px 20px;display:flex;align-items:center;gap:16px;
+    position:sticky;top:0;z-index:20;box-shadow:var(--shadow);
+  }
+  header h1{font-size:19px;font-weight:600}
+  .who{margin-inline-start:auto;display:flex;align-items:center;gap:8px;font-size:14px;color:var(--muted)}
+  .who select{padding:5px 8px;border:1px solid var(--line);border-radius:7px;font-size:14px;font-family:inherit}
+  .wrap{max-width:860px;margin:0 auto;padding:18px 16px}
+
+  .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px}
+  .filters{display:flex;gap:6px;flex-wrap:wrap}
+  .chip{
+    padding:6px 13px;border:1px solid var(--line);background:var(--card);
+    border-radius:20px;font-size:13px;cursor:pointer;color:var(--muted);
+    font-family:inherit;transition:.15s;
+  }
+  .chip:hover{border-color:var(--accent)}
+  .chip.active{background:var(--accent);color:#fff;border-color:var(--accent)}
+  .btn{
+    padding:8px 16px;border:none;border-radius:8px;font-size:14px;
+    font-weight:600;cursor:pointer;font-family:inherit;background:var(--accent);color:#fff;
+  }
+  .btn:hover{filter:brightness(1.06)}
+  .btn.add{margin-inline-start:auto}
+  .btn.ghost{background:transparent;color:var(--muted);font-weight:500}
+  .btn.danger{background:transparent;color:var(--danger);font-weight:500}
+
+  .card{
+    background:var(--card);border:1px solid var(--line);border-radius:12px;
+    padding:15px 16px;margin-bottom:11px;box-shadow:var(--shadow);cursor:pointer;
+    transition:.15s;border-inline-start:4px solid var(--line);
+  }
+  .card:hover{transform:translateY(-1px);box-shadow:0 3px 10px rgba(20,30,45,.1)}
+  .card.s-open{border-inline-start-color:var(--open)}
+  .card.s-progress{border-inline-start-color:var(--progress)}
+  .card.s-wait{border-inline-start-color:var(--wait)}
+  .card.s-done{border-inline-start-color:var(--done);opacity:.72}
+  .card-top{display:flex;align-items:flex-start;gap:10px}
+  .card-title{font-size:16px;font-weight:600;flex:1}
+  .badge{font-size:11.5px;font-weight:600;padding:3px 9px;border-radius:12px;white-space:nowrap}
+  .b-open{background:#fdf0dc;color:#9a6d1c}
+  .b-progress{background:#e2eefa;color:#265a8a}
+  .b-wait{background:#eee9f6;color:#5c4f82}
+  .b-done{background:#e2f2e9;color:#2e6b48}
+  .card-meta{display:flex;gap:14px;flex-wrap:wrap;margin-top:9px;font-size:12.5px;color:var(--muted)}
+  .card-meta .cm{display:flex;align-items:center;gap:4px}
+  .prio-high{color:var(--danger);font-weight:600}
+  .ccount{margin-inline-start:auto;font-size:12px;color:var(--muted)}
+  .overdue{color:var(--danger);font-weight:600}
+
+  .empty{text-align:center;color:var(--muted);padding:50px 20px;font-size:15px}
+
+  /* Modal */
+  .overlay{
+    position:fixed;inset:0;background:rgba(20,28,40,.45);
+    display:none;align-items:flex-start;justify-content:center;
+    padding:24px 14px;z-index:50;overflow-y:auto;
+  }
+  .overlay.show{display:flex}
+  .modal{
+    background:var(--card);border-radius:14px;width:100%;max-width:560px;
+    box-shadow:0 12px 40px rgba(20,30,45,.28);animation:pop .16s ease;
+  }
+  @keyframes pop{from{transform:scale(.97);opacity:0}to{transform:scale(1);opacity:1}}
+  .modal-head{padding:16px 20px;border-bottom:1px solid var(--line);display:flex;align-items:center;gap:10px}
+  .modal-head h2{font-size:17px;font-weight:600;flex:1}
+  .x{background:none;border:none;font-size:22px;color:var(--muted);cursor:pointer;line-height:1}
+  .modal-body{padding:18px 20px}
+  .field{margin-bottom:14px}
+  .field label{display:block;font-size:13px;font-weight:600;color:var(--muted);margin-bottom:5px}
+  .field input,.field textarea,.field select{
+    width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;
+    font-size:14px;font-family:inherit;background:#fff;color:var(--text);
+  }
+  .field textarea{resize:vertical;min-height:70px}
+  .row2{display:flex;gap:12px}
+  .row2 .field{flex:1}
+  .modal-foot{padding:14px 20px;border-top:1px solid var(--line);display:flex;gap:10px;align-items:center}
+
+  /* Detail view */
+  .detail-desc{font-size:14px;color:var(--text);white-space:pre-wrap;margin-bottom:6px}
+  .detail-meta{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin:12px 0;padding-bottom:14px;border-bottom:1px solid var(--line)}
+  .thread-title{font-size:14px;font-weight:600;margin:4px 0 12px}
+  .comment{background:var(--bg);border-radius:9px;padding:10px 12px;margin-bottom:9px}
+  .comment-head{display:flex;gap:8px;font-size:12px;color:var(--muted);margin-bottom:4px}
+  .comment-author{font-weight:600;color:var(--accent)}
+  .comment-text{font-size:14px;white-space:pre-wrap}
+  .add-comment{display:flex;gap:8px;margin-top:14px}
+  .add-comment textarea{flex:1;min-height:44px}
+  .no-comments{font-size:13px;color:var(--muted);padding:8px 0}
+
+  .toast{
+    position:fixed;bottom:22px;left:50%;transform:translateX(-50%);
+    background:#1f2733;color:#fff;padding:11px 20px;border-radius:9px;
+    font-size:14px;z-index:100;opacity:0;transition:.25s;pointer-events:none;
+  }
+  .toast.show{opacity:1}
+  .loading{text-align:center;padding:40px;color:var(--muted)}
+  .en{unicode-bidi:isolate}
+</style>
+</head>
+<body>
+<header>
+  <h1>ניהול משימות</h1>
+  <div class="who">
+    מחובר/ת:
+    <select id="userSelect" onchange="setUser(this.value)"></select>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="toolbar">
+    <div class="filters" id="filters"></div>
+    <button class="btn add" onclick="openTaskForm()">+ משימה חדשה</button>
+  </div>
+  <div id="list"><div class="loading">טוען…</div></div>
+</div>
+
+<!-- Modal: task form (add/edit) -->
+<div class="overlay" id="formOverlay">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="formTitle">משימה חדשה</h2>
+      <button class="x" onclick="closeForm()">×</button>
+    </div>
+    <div class="modal-body">
+      <input type="hidden" id="f_taskId">
+      <div class="field">
+        <label>כותרת</label>
+        <input id="f_title" placeholder="מה צריך לעשות?">
+      </div>
+      <div class="field">
+        <label>תיאור</label>
+        <textarea id="f_description" placeholder="פרטים נוספים (לא חובה)"></textarea>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>אחראי</label>
+          <select id="f_assignee"></select>
+        </div>
+        <div class="field">
+          <label>עדיפות</label>
+          <select id="f_priority">
+            <option>רגילה</option><option>גבוהה</option><option>נמוכה</option>
+          </select>
+        </div>
+      </div>
+      <div class="row2">
+        <div class="field">
+          <label>סטטוס</label>
+          <select id="f_status">
+            <option>פתוח</option><option>בתהליך</option><option>ממתין</option><option>הושלם</option>
+          </select>
+        </div>
+        <div class="field">
+          <label>תאריך יעד</label>
+          <input type="date" id="f_dueDate">
+        </div>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn" onclick="saveTask()">שמירה</button>
+      <button class="btn ghost" onclick="closeForm()">ביטול</button>
+    </div>
+  </div>
+</div>
+
+<!-- Modal: task detail -->
+<div class="overlay" id="detailOverlay">
+  <div class="modal">
+    <div class="modal-head">
+      <h2 id="d_title"></h2>
+      <button class="x" onclick="closeDetail()">×</button>
+    </div>
+    <div class="modal-body">
+      <div class="detail-desc" id="d_desc"></div>
+      <div class="detail-meta" id="d_meta"></div>
+      <div class="thread-title">עדכונים והערות</div>
+      <div id="d_comments"></div>
+      <div class="add-comment">
+        <textarea id="d_newComment" placeholder="כתוב עדכון / הערה…"></textarea>
+        <button class="btn" onclick="postComment()">הוסף</button>
+      </div>
+    </div>
+    <div class="modal-foot">
+      <button class="btn ghost" onclick="editCurrent()">עריכה</button>
+      <button class="btn danger" id="d_deleteBtn" onclick="deleteCurrent()">מחיקה</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+// ===== הגדרות =====
+const CONFIG = {
+  API_URL: 'https://script.google.com/macros/s/AKfycbzpzvD_HpxTRMC-eSkr4eY1XKJ9aIEOmuR9x9TkjohLsRXioJff6XNKr894Q2Y_MxB6/exec',   // כתובת ה-Web app מ-Apps Script
+  USERS: ['עופר','רפי'],
+  DELETE_USER: 'עופר'                        // רק משתמש זה יכול למחוק
+};
+
+const STATUS_CLASS = {'פתוח':'open','בתהליך':'progress','ממתין':'wait','הושלם':'done'};
+let TASKS = [];
+let currentUser = localStorage.getItem('taskUser') || CONFIG.USERS[0];
+let activeFilter = 'all';
+let currentTaskId = null;
+
+// ===== אתחול =====
+function init(){
+  // תפריט משתמש
+  const us = document.getElementById('userSelect');
+  us.innerHTML = CONFIG.USERS.map(u=>`<option ${u===currentUser?'selected':''}>${u}</option>`).join('');
+  // אחראי בטופס
+  document.getElementById('f_assignee').innerHTML = CONFIG.USERS.map(u=>`<option>${u}</option>`).join('');
+  // פילטרים
+  const filters = [
+    {k:'all',   t:'הכל'},
+    {k:'open',  t:'פתוחות'},
+    {k:'mine',  t:'שלי'},
+    {k:'done',  t:'הושלמו'}
+  ];
+  document.getElementById('filters').innerHTML = filters.map(f=>
+    `<button class="chip ${f.k===activeFilter?'active':''}" onclick="setFilter('${f.k}')">${f.t}</button>`
+  ).join('');
+  load();
+}
+
+function setUser(u){ currentUser=u; localStorage.setItem('taskUser',u); render(); }
+function setFilter(k){
+  activeFilter=k;
+  document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
+  event.target.classList.add('active');
+  render();
+}
+
+// ===== תקשורת עם השרת =====
+async function api(action, params={}){
+  const url = new URL(CONFIG.API_URL);
+  url.searchParams.set('action', action);
+  Object.keys(params).forEach(k=>url.searchParams.set(k, params[k]));
+  const res = await fetch(url.toString());
+  return res.json();
+}
+
+async function load(){
+  try{
+    const data = await api('list');
+    if(data.error) throw new Error(data.error);
+    TASKS = data.tasks || [];
+    render();
+  }catch(e){
+    document.getElementById('list').innerHTML =
+      `<div class="empty">שגיאה בטעינה: ${e.message}<br>בדוק את כתובת ה-API בהגדרות.</div>`;
+  }
+}
+
+// ===== רינדור הרשימה =====
+function render(){
+  let list = TASKS.slice();
+  if(activeFilter==='open')  list = list.filter(t=>t.Status!=='הושלם');
+  if(activeFilter==='done')  list = list.filter(t=>t.Status==='הושלם');
+  if(activeFilter==='mine')  list = list.filter(t=>t.Assignee===currentUser);
+
+  const el = document.getElementById('list');
+  if(!list.length){ el.innerHTML = '<div class="empty">אין משימות להצגה</div>'; return; }
+
+  el.innerHTML = list.map(t=>{
+    const sc = STATUS_CLASS[t.Status]||'open';
+    const cn = (t.comments||[]).length;
+    const due = fmtDue(t.DueDate, t.Status);
+    const prio = t.Priority==='גבוהה' ? '<span class="cm prio-high">● עדיפות גבוהה</span>' : '';
+    return `<div class="card s-${sc}" onclick="openDetail('${t.TaskID}')">
+      <div class="card-top">
+        <div class="card-title">${esc(t.Title)}</div>
+        <span class="badge b-${sc}">${t.Status}</span>
+      </div>
+      <div class="card-meta">
+        <span class="cm">👤 ${esc(t.Assignee||'—')}</span>
+        ${due}
+        ${prio}
+        ${cn?`<span class="ccount">💬 ${cn}</span>`:''}
+      </div>
+    </div>`;
+  }).join('');
+}
+
+function fmtDue(d, status){
+  if(!d) return '';
+  const date = new Date(d);
+  if(isNaN(date)) return '';
+  const txt = date.toLocaleDateString('he-IL',{day:'numeric',month:'numeric',year:'numeric'});
+  const overdue = status!=='הושלם' && date < new Date(new Date().toDateString());
+  return `<span class="cm ${overdue?'overdue':''}">📅 ${txt}${overdue?' (עבר)':''}</span>`;
+}
+
+// ===== טופס משימה =====
+function openTaskForm(){
+  document.getElementById('formTitle').textContent='משימה חדשה';
+  document.getElementById('f_taskId').value='';
+  document.getElementById('f_title').value='';
+  document.getElementById('f_description').value='';
+  document.getElementById('f_assignee').value=currentUser;
+  document.getElementById('f_priority').value='רגילה';
+  document.getElementById('f_status').value='פתוח';
+  document.getElementById('f_dueDate').value='';
+  show('formOverlay');
+}
+
+function editCurrent(){
+  const t = TASKS.find(x=>x.TaskID===currentTaskId);
+  if(!t) return;
+  closeDetail();
+  document.getElementById('formTitle').textContent='עריכת משימה';
+  document.getElementById('f_taskId').value=t.TaskID;
+  document.getElementById('f_title').value=t.Title||'';
+  document.getElementById('f_description').value=t.Description||'';
+  document.getElementById('f_assignee').value=t.Assignee||currentUser;
+  document.getElementById('f_priority').value=t.Priority||'רגילה';
+  document.getElementById('f_status').value=t.Status||'פתוח';
+  document.getElementById('f_dueDate').value=t.DueDate? t.DueDate.slice(0,10):'';
+  show('formOverlay');
+}
+
+async function saveTask(){
+  const id = document.getElementById('f_taskId').value;
+  const title = document.getElementById('f_title').value.trim();
+  if(!title){ toast('צריך כותרת'); return; }
+  const p = {
+    title,
+    description: document.getElementById('f_description').value.trim(),
+    assignee:  document.getElementById('f_assignee').value,
+    priority:  document.getElementById('f_priority').value,
+    status:    document.getElementById('f_status').value,
+    dueDate:   document.getElementById('f_dueDate').value
+  };
+  closeForm();
+  toast('שומר…');
+  if(id){
+    await api('editTask', {taskId:id, ...p});
+    toast('המשימה עודכנה');
+  }else{
+    await api('addTask', {createdBy:currentUser, ...p});
+    toast('המשימה נוספה');
+  }
+  await load();
+}
+
+// ===== תצוגת משימה =====
+function openDetail(id){
+  const t = TASKS.find(x=>x.TaskID===id);
+  if(!t) return;
+  currentTaskId = id;
+  document.getElementById('d_title').textContent = t.Title;
+  document.getElementById('d_desc').textContent = t.Description || '';
+  document.getElementById('d_desc').style.display = t.Description? 'block':'none';
+
+  const created = t.CreatedAt? new Date(t.CreatedAt).toLocaleDateString('he-IL'):'';
+  document.getElementById('d_meta').innerHTML = `
+    <span>סטטוס: <b>${t.Status}</b></span>
+    <span>אחראי: <b>${esc(t.Assignee||'—')}</b></span>
+    <span>עדיפות: <b>${t.Priority}</b></span>
+    ${t.DueDate?`<span>יעד: <b>${new Date(t.DueDate).toLocaleDateString('he-IL')}</b></span>`:''}
+    <span>נפתח ע"י: <b>${esc(t.CreatedBy||'—')}</b> ${created}</span>`;
+
+  const comments = t.comments||[];
+  document.getElementById('d_comments').innerHTML = comments.length
+    ? comments.map(c=>`<div class="comment">
+        <div class="comment-head">
+          <span class="comment-author">${esc(c.Author)}</span>
+          <span>${new Date(c.Timestamp).toLocaleString('he-IL',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'})}</span>
+        </div>
+        <div class="comment-text">${esc(c.Text)}</div>
+      </div>`).join('')
+    : '<div class="no-comments">אין עדכונים עדיין</div>';
+
+  document.getElementById('d_newComment').value='';
+  // כפתור מחיקה — רק למשתמש המורשה
+  document.getElementById('d_deleteBtn').style.display =
+    currentUser===CONFIG.DELETE_USER ? 'inline-block':'none';
+  show('detailOverlay');
+}
+
+async function postComment(){
+  const text = document.getElementById('d_newComment').value.trim();
+  if(!text) return;
+  document.getElementById('d_newComment').value='';
+  toast('שולח…');
+  await api('addComment', {taskId:currentTaskId, author:currentUser, text});
+  await load();
+  openDetail(currentTaskId); // רענון התצוגה
+  toast('העדכון נוסף');
+}
+
+async function deleteCurrent(){
+  if(!confirm('למחוק את המשימה וכל ההערות שלה?')) return;
+  closeDetail();
+  toast('מוחק…');
+  const r = await api('deleteTask', {taskId:currentTaskId, actor:currentUser});
+  if(r.error){ toast(r.error); return; }
+  await load();
+  toast('המשימה נמחקה');
+}
+
+// ===== עזרים =====
+function show(id){ document.getElementById(id).classList.add('show'); }
+function closeForm(){ document.getElementById('formOverlay').classList.remove('show'); }
+function closeDetail(){ document.getElementById('detailOverlay').classList.remove('show'); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+let toastTimer;
+function toast(msg){
+  const t=document.getElementById('toast');
+  t.textContent=msg; t.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('show'),2200);
+}
+// סגירת מודל בלחיצה על הרקע
+document.querySelectorAll('.overlay').forEach(o=>{
+  o.addEventListener('click',e=>{ if(e.target===o) o.classList.remove('show'); });
+});
+
+init();
+</script>
+</body>
+</html>
