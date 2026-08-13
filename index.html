@@ -1,3 +1,4 @@
+
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
@@ -101,11 +102,26 @@
   .detail-meta{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin:12px 0;padding-bottom:14px;border-bottom:1px solid var(--line)}
   .thread-title{font-size:14px;font-weight:600;margin:4px 0 12px}
   .comment{background:var(--bg);border-radius:9px;padding:10px 12px;margin-bottom:9px}
-  .comment-head{display:flex;gap:8px;font-size:12px;color:var(--muted);margin-bottom:4px}
+  .comment.has-due{border-inline-start:3px solid var(--progress)}
+  .comment.due-overdue{border-inline-start-color:var(--danger)}
+  .comment-head{display:flex;gap:8px;font-size:12px;color:var(--muted);margin-bottom:4px;align-items:center}
   .comment-author{font-weight:600;color:var(--accent)}
+  .comment-actions{margin-inline-start:auto;display:flex;gap:6px}
+  .comment-actions button{background:none;border:none;cursor:pointer;font-size:12px;color:var(--muted);padding:2px 4px}
+  .comment-actions button:hover{color:var(--accent)}
+  .comment-actions button.del:hover{color:var(--danger)}
   .comment-text{font-size:14px;white-space:pre-wrap}
-  .add-comment{display:flex;gap:8px;margin-top:14px}
+  .comment-due{display:inline-block;margin-top:6px;font-size:12px;font-weight:600;color:var(--progress);background:#e2eefa;padding:2px 9px;border-radius:11px}
+  .comment-due.overdue{color:var(--danger);background:#fbe4e4}
+  .comment-edit{margin-top:6px}
+  .comment-edit textarea{width:100%;min-height:50px;padding:8px 10px;border:1px solid var(--line);border-radius:7px;font-family:inherit;font-size:14px}
+  .comment-edit .er{display:flex;gap:8px;align-items:center;margin-top:7px}
+  .comment-edit input[type=date]{padding:6px 9px;border:1px solid var(--line);border-radius:7px;font-family:inherit;font-size:13px}
+  .add-comment{margin-top:14px}
+  .add-comment .ac-row{display:flex;gap:8px}
   .add-comment textarea{flex:1;min-height:44px}
+  .add-comment .ac-due{display:flex;align-items:center;gap:7px;margin-top:8px;font-size:13px;color:var(--muted)}
+  .add-comment .ac-due input{padding:6px 9px;border:1px solid var(--line);border-radius:7px;font-family:inherit;font-size:13px}
   .no-comments{font-size:13px;color:var(--muted);padding:8px 0}
 
   .toast{
@@ -197,8 +213,14 @@
       <div class="thread-title">עדכונים והערות</div>
       <div id="d_comments"></div>
       <div class="add-comment">
-        <textarea id="d_newComment" placeholder="כתוב עדכון / הערה…"></textarea>
-        <button class="btn" onclick="postComment()">הוסף</button>
+        <div class="ac-row">
+          <textarea id="d_newComment" placeholder="כתוב עדכון / הערה…"></textarea>
+          <button class="btn" onclick="postComment()">הוסף</button>
+        </div>
+        <div class="ac-due">
+          <label>תאריך יעד להערה (לא חובה):</label>
+          <input type="date" id="d_newDue">
+        </div>
       </div>
     </div>
     <div class="modal-foot">
@@ -213,7 +235,7 @@
 <script>
 // ===== הגדרות =====
 const CONFIG = {
-  API_URL: 'https://script.google.com/macros/s/AKfycbzpzvD_HpxTRMC-eSkr4eY1XKJ9aIEOmuR9x9TkjohLsRXioJff6XNKr894Q2Y_MxB6/exec',   // כתובת ה-Web app מ-Apps Script
+  API_URL: 'PASTE_YOUR_WEB_APP_URL_HERE',   // כתובת ה-Web app מ-Apps Script
   USERS: ['עופר','רפי'],
   DELETE_USER: 'עופר'                        // רק משתמש זה יכול למחוק
 };
@@ -383,28 +405,97 @@ function openDetail(id){
 
   const comments = t.comments||[];
   document.getElementById('d_comments').innerHTML = comments.length
-    ? comments.map(c=>`<div class="comment">
-        <div class="comment-head">
-          <span class="comment-author">${esc(c.Author)}</span>
-          <span>${new Date(c.Timestamp).toLocaleString('he-IL',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'})}</span>
-        </div>
-        <div class="comment-text">${esc(c.Text)}</div>
-      </div>`).join('')
+    ? comments.map(c=>renderComment(c)).join('')
     : '<div class="no-comments">אין עדכונים עדיין</div>';
 
   document.getElementById('d_newComment').value='';
+  document.getElementById('d_newDue').value='';
   // כפתור מחיקה — רק למשתמש המורשה
   document.getElementById('d_deleteBtn').style.display =
     currentUser===CONFIG.DELETE_USER ? 'inline-block':'none';
   show('detailOverlay');
 }
 
+// בניית הצגת הערה בודדת
+function renderComment(c){
+  const dt = new Date(c.Timestamp).toLocaleString('he-IL',{day:'numeric',month:'numeric',hour:'2-digit',minute:'2-digit'});
+  const mine = c.Author===currentUser;
+  // תג תאריך יעד
+  let dueTag='', dueClass='';
+  if(c.DueDate){
+    const dd=new Date(c.DueDate);
+    if(!isNaN(dd)){
+      const over = dd < new Date(new Date().toDateString());
+      dueClass = over ? 'has-due due-overdue' : 'has-due';
+      dueTag = `<div class="comment-due ${over?'overdue':''}">📅 יעד: ${dd.toLocaleDateString('he-IL')}${over?' (עבר)':''}</div>`;
+    }
+  }
+  // כפתורי עריכה/מחיקה — רק להערות שלי
+  const actions = mine ? `<span class="comment-actions">
+      <button onclick="startEditComment('${c.CommentID}')">✎ עריכה</button>
+      <button class="del" onclick="deleteComment('${c.CommentID}')">🗑 מחק</button>
+    </span>` : '';
+  return `<div class="comment ${dueClass}" id="cm-${c.CommentID}">
+    <div class="comment-head">
+      <span class="comment-author">${esc(c.Author)}</span>
+      <span>${dt}</span>
+      ${actions}
+    </div>
+    <div class="comment-body">
+      <div class="comment-text">${esc(c.Text)}</div>
+      ${dueTag}
+    </div>
+  </div>`;
+}
+
+// מעבר למצב עריכה של הערה
+function startEditComment(id){
+  const t = TASKS.find(x=>x.TaskID===currentTaskId);
+  const c = (t.comments||[]).find(x=>x.CommentID===id);
+  if(!c) return;
+  const dueVal = c.DueDate ? new Date(c.DueDate).toISOString().slice(0,10) : '';
+  const body = document.querySelector(`#cm-${id} .comment-body`);
+  body.innerHTML = `<div class="comment-edit">
+    <textarea id="edit-text-${id}">${esc(c.Text)}</textarea>
+    <div class="er">
+      <label style="font-size:12px;color:var(--muted)">יעד:</label>
+      <input type="date" id="edit-due-${id}" value="${dueVal}">
+      <button class="btn" style="padding:6px 12px" onclick="saveEditComment('${id}')">שמור</button>
+      <button class="btn ghost" style="padding:6px 12px" onclick="openDetail(currentTaskId)">ביטול</button>
+    </div>
+  </div>`;
+}
+
+async function saveEditComment(id){
+  const text = document.getElementById('edit-text-'+id).value.trim();
+  const dueDate = document.getElementById('edit-due-'+id).value;
+  if(!text){ toast('ההערה לא יכולה להיות ריקה'); return; }
+  toast('שומר…');
+  const r = await api('editComment', {commentId:id, actor:currentUser, text, dueDate});
+  if(r.error){ toast(r.error); return; }
+  await load();
+  openDetail(currentTaskId);
+  toast('ההערה עודכנה');
+}
+
+async function deleteComment(id){
+  if(!confirm('למחוק את ההערה?')) return;
+  toast('מוחק…');
+  const r = await api('deleteComment', {commentId:id, actor:currentUser});
+  if(r.error){ toast(r.error); return; }
+  await load();
+  openDetail(currentTaskId);
+  toast('ההערה נמחקה');
+}
+
 async function postComment(){
   const text = document.getElementById('d_newComment').value.trim();
+  const dueDate = document.getElementById('d_newDue').value;
   if(!text) return;
   document.getElementById('d_newComment').value='';
+  document.getElementById('d_newDue').value='';
   toast('שולח…');
-  await api('addComment', {taskId:currentTaskId, author:currentUser, text});
+  await api('addComment', {taskId:currentTaskId, author:currentUser, text, dueDate});
   await load();
   openDetail(currentTaskId); // רענון התצוגה
   toast('העדכון נוסף');
