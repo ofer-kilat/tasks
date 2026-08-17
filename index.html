@@ -289,9 +289,21 @@ async function load(){
     if(data.error) throw new Error(data.error);
     TASKS = data.tasks || [];
     render();
+    openFromUrl();
   }catch(e){
     document.getElementById('list').innerHTML =
       `<div class="empty">שגיאה בטעינה: ${e.message}<br>בדוק את כתובת ה-API בהגדרות.</div>`;
+  }
+}
+
+// פתיחת משימה ישירות מקישור במייל (?task=ID) — פעם אחת בטעינה
+let urlHandled = false;
+function openFromUrl(){
+  if(urlHandled) return;
+  const id = new URLSearchParams(location.search).get('task');
+  if(id && TASKS.some(t=>t.TaskID===id)){
+    urlHandled = true;
+    openDetail(id);
   }
 }
 
@@ -377,7 +389,7 @@ async function saveTask(){
   closeForm();
   toast('שומר…');
   if(id){
-    await api('editTask', {taskId:id, ...p});
+    await api('editTask', {taskId:id, actor:currentUser, ...p});
     toast('המשימה עודכנה');
   }else{
     await api('addTask', {createdBy:currentUser, ...p});
