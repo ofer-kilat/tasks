@@ -28,6 +28,19 @@
   .wrap{max-width:860px;margin:0 auto;padding:18px 16px}
 
   .toolbar{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:16px}
+  .search-bar{position:relative;margin-bottom:16px}
+  .search-bar input{
+    width:100%;padding:11px 14px;border:1px solid var(--line);border-radius:10px;
+    font-size:14.5px;font-family:inherit;background:var(--card);color:var(--text);
+    box-shadow:var(--shadow);
+  }
+  .search-bar input:focus{outline:none;border-color:var(--accent)}
+  .search-clear{
+    position:absolute;inset-inline-end:10px;top:50%;transform:translateY(-50%);
+    background:none;border:none;font-size:20px;color:var(--muted);cursor:pointer;
+    display:none;line-height:1;padding:0 4px;
+  }
+  .search-clear.show{display:block}
   .filters{display:flex;gap:6px;flex-wrap:wrap}
   .chip{
     padding:6px 13px;border:1px solid var(--line);background:var(--card);
@@ -149,6 +162,11 @@
     <div class="filters" id="filters"></div>
     <button class="btn add" onclick="openTaskForm()">+ משימה חדשה</button>
   </div>
+  <div class="search-bar">
+    <input type="text" id="searchBox" placeholder="🔍 חיפוש משימה (כותרת, תיאור או הערות)…"
+           oninput="onSearch(this.value)" autocomplete="off">
+    <button class="search-clear" id="searchClear" onclick="clearSearch()" title="נקה">×</button>
+  </div>
   <div id="list"><div class="loading">טוען…</div></div>
 </div>
 
@@ -236,7 +254,7 @@
 
 <script>
 // ===== הגדרות =====
-const APP_VERSION = '170826-1245';   // חותמת גרסה (DDMMYY-HHMM שעון ירושלים)
+const APP_VERSION = '170826-1310';   // חותמת גרסה (DDMMYY-HHMM שעון ירושלים)
 const CONFIG = {
   API_URL: 'https://script.google.com/macros/s/AKfycbzpzvD_HpxTRMC-eSkr4eY1XKJ9aIEOmuR9x9TkjohLsRXioJff6XNKr894Q2Y_MxB6/exec',   // כתובת ה-Web app מ-Apps Script
   USERS: ['עופר','רפי'],
@@ -247,6 +265,7 @@ const STATUS_CLASS = {'פתוח':'open','בתהליך':'progress','ממתין':'
 let TASKS = [];
 let currentUser = localStorage.getItem('taskUser') || CONFIG.USERS[0];
 let activeFilter = 'all';
+let searchTerm = '';
 let currentTaskId = null;
 
 // ===== אתחול =====
@@ -275,6 +294,20 @@ function setFilter(k){
   activeFilter=k;
   document.querySelectorAll('.chip').forEach(c=>c.classList.remove('active'));
   event.target.classList.add('active');
+  render();
+}
+
+// ===== חיפוש =====
+function onSearch(val){
+  searchTerm = val.trim();
+  document.getElementById('searchClear').classList.toggle('show', searchTerm.length>0);
+  render();
+}
+function clearSearch(){
+  searchTerm='';
+  const box=document.getElementById('searchBox');
+  box.value=''; box.focus();
+  document.getElementById('searchClear').classList.remove('show');
   render();
 }
 
@@ -318,8 +351,24 @@ function render(){
   if(activeFilter==='done')  list = list.filter(t=>t.Status==='הושלם');
   if(activeFilter==='mine')  list = list.filter(t=>t.Assignee===currentUser);
 
+  // חיפוש טקסט חופשי — בכותרת, תיאור, ובתוך ההערות
+  if(searchTerm){
+    const q = searchTerm.toLowerCase();
+    list = list.filter(t=>{
+      const inTitle = (t.Title||'').toLowerCase().includes(q);
+      const inDesc  = (t.Description||'').toLowerCase().includes(q);
+      const inComments = (t.comments||[]).some(c=>(c.Text||'').toLowerCase().includes(q));
+      return inTitle || inDesc || inComments;
+    });
+  }
+
   const el = document.getElementById('list');
-  if(!list.length){ el.innerHTML = '<div class="empty">אין משימות להצגה</div>'; return; }
+  if(!list.length){
+    el.innerHTML = searchTerm
+      ? `<div class="empty">לא נמצאו משימות התואמות ל־"${esc(searchTerm)}"</div>`
+      : '<div class="empty">אין משימות להצגה</div>';
+    return;
+  }
 
   el.innerHTML = list.map(t=>{
     const sc = STATUS_CLASS[t.Status]||'open';
