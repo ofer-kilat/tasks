@@ -116,19 +116,25 @@
   .detail-desc{font-size:14px;color:var(--text);white-space:pre-wrap;margin-bottom:6px}
   .detail-meta{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin:12px 0;padding-bottom:14px;border-bottom:1px solid var(--line)}
   .thread-title{font-size:14px;font-weight:600;margin:4px 0 12px}
-  .files-section{margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--line)}
-  .file-item{display:flex;align-items:center;gap:8px;background:var(--bg);border-radius:8px;padding:8px 11px;margin-bottom:7px}
-  .file-item .fi-icon{font-size:16px}
-  .file-item .fi-name{flex:1;font-size:13.5px;color:var(--text);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .comment-files{margin-top:8px;display:flex;flex-direction:column;gap:5px}
+  .file-item{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:8px;padding:6px 10px}
+  .file-item .fi-icon{font-size:15px}
+  .file-item .fi-name{flex:1;font-size:13px;color:var(--text);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .file-item .fi-name:hover{color:var(--accent);text-decoration:underline}
-  .file-item .fi-meta{font-size:11.5px;color:var(--muted)}
-  .file-item .fi-del{background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px;padding:2px 5px}
+  .file-item .fi-del{background:none;border:none;cursor:pointer;color:var(--muted);font-size:13px;padding:2px 5px}
   .file-item .fi-del:hover{color:var(--danger)}
-  .no-files{font-size:13px;color:var(--muted);padding:4px 0 8px}
-  .add-file{display:flex;align-items:center;gap:10px;margin-top:6px;flex-wrap:wrap}
+  .comment-attach{background:none;border:none;cursor:pointer;font-size:12px;color:var(--muted);padding:2px 4px}
+  .comment-attach:hover{color:var(--accent)}
+  .ac-files{display:flex;align-items:center;gap:10px;margin-top:8px;flex-wrap:wrap}
+  .btn-attach{padding:6px 12px;font-size:13px}
   .file-hint{font-size:12px;color:var(--muted)}
-  .file-status{font-size:12.5px;color:var(--accent);font-weight:600}
+  .file-status{font-size:12.5px;color:var(--accent);font-weight:600;margin-top:6px}
   .file-status.err{color:var(--danger)}
+  .pending-files{display:flex;flex-direction:column;gap:4px;margin-top:8px}
+  .pending-file{display:flex;align-items:center;gap:8px;background:var(--accent-soft);border-radius:7px;padding:5px 10px;font-size:13px}
+  .pending-file .pf-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .pending-file .pf-remove{background:none;border:none;cursor:pointer;color:var(--muted);font-size:15px;padding:0 4px}
+  .pending-file .pf-remove:hover{color:var(--danger)}
   .comment{background:var(--bg);border-radius:9px;padding:10px 12px;margin-bottom:9px}
   .comment.has-due{border-inline-start:3px solid var(--progress)}
   .comment.due-overdue{border-inline-start-color:var(--danger)}
@@ -245,17 +251,6 @@
       <div class="detail-desc" id="d_desc"></div>
       <div class="detail-meta" id="d_meta"></div>
 
-      <div class="files-section">
-        <div class="thread-title">קבצים מצורפים</div>
-        <div id="d_files"></div>
-        <div class="add-file">
-          <input type="file" id="d_fileInput" style="display:none" onchange="onFilePicked(this)">
-          <button class="btn ghost" onclick="document.getElementById('d_fileInput').click()">📎 הוסף קובץ</button>
-          <span class="file-hint">עד 5MB לקובץ</span>
-          <span id="d_fileStatus" class="file-status"></span>
-        </div>
-      </div>
-
       <div class="thread-title">עדכונים והערות</div>
       <div id="d_comments"></div>
       <div class="add-comment">
@@ -267,6 +262,13 @@
           <label>תאריך יעד להערה (לא חובה):</label>
           <input type="date" id="d_newDue">
         </div>
+        <div class="ac-files">
+          <input type="file" id="d_newFiles" multiple style="display:none" onchange="onNewFilesPicked(this)">
+          <button class="btn ghost btn-attach" onclick="document.getElementById('d_newFiles').click()">📎 צרף קבצים</button>
+          <span class="file-hint">עד 5MB לקובץ</span>
+        </div>
+        <div id="d_pendingFiles" class="pending-files"></div>
+        <div id="d_newStatus" class="file-status"></div>
       </div>
     </div>
     <div class="modal-foot">
@@ -281,7 +283,7 @@
 
 <script>
 // ===== הגדרות =====
-const APP_VERSION = '160926-1115';   // חותמת גרסה (DDMMYY-HHMM שעון ירושלים)
+const APP_VERSION = '160926-1145';   // חותמת גרסה (DDMMYY-HHMM שעון ירושלים)
 const CONFIG = {
   API_URL: 'https://script.google.com/macros/s/AKfycbzpzvD_HpxTRMC-eSkr4eY1XKJ9aIEOmuR9x9TkjohLsRXioJff6XNKr894Q2Y_MxB6/exec',   // כתובת ה-Web app מ-Apps Script
   USERS: ['עופר','רפי'],
@@ -443,7 +445,7 @@ function render(){
         <span class="cm">👤 ${esc(t.Assignee||'—')}</span>
         ${due}
         ${prio}
-        ${(t.files&&t.files.length)?`<span class="cm">📎 ${t.files.length}</span>`:''}
+        ${(()=>{const fc=(t.comments||[]).reduce((s,c)=>s+((c.files||[]).length),0);return fc?`<span class="cm">📎 ${fc}</span>`:'';})()}
         ${cn?`<span class="ccount">💬 ${cn}</span>`:''}
       </div>
       ${lastUpdate}
@@ -534,13 +536,11 @@ function openDetail(id){
     ? comments.map(c=>renderComment(c)).join('')
     : '<div class="no-comments">אין עדכונים עדיין</div>';
 
-  // קבצים מצורפים
-  const files = t.files||[];
-  document.getElementById('d_files').innerHTML = files.length
-    ? files.map(f=>renderFile(f)).join('')
-    : '<div class="no-files">אין קבצים מצורפים</div>';
-  document.getElementById('d_fileStatus').textContent='';
-  document.getElementById('d_fileInput').value='';
+  // איפוס אזור הוספת הערה + קבצים ממתינים
+  pendingFiles = [];
+  renderPendingFiles();
+  document.getElementById('d_newStatus').textContent='';
+  document.getElementById('d_newFiles').value='';
 
   document.getElementById('d_newComment').value='';
   document.getElementById('d_newDue').value='';
@@ -564,11 +564,17 @@ function renderComment(c){
       dueTag = `<div class="comment-due ${over?'overdue':''}">📅 יעד: ${dd.toLocaleDateString('he-IL')}${over?' (עבר)':''}</div>`;
     }
   }
-  // כפתורי עריכה/מחיקה — רק להערות שלי
+  // כפתורי עריכה/מחיקה + צירוף קובץ — רק להערות שלי
   const actions = mine ? `<span class="comment-actions">
       <button onclick="startEditComment('${c.CommentID}')">✎ עריכה</button>
+      <button class="comment-attach" onclick="attachToComment('${c.CommentID}')">📎 צרף</button>
       <button class="del" onclick="deleteComment('${c.CommentID}')">🗑 מחק</button>
     </span>` : '';
+  // קבצים מצורפים להערה
+  const files = c.files||[];
+  const filesHtml = files.length ? `<div class="comment-files">
+      ${files.map(f=>renderFile(f)).join('')}
+    </div>` : '';
   return `<div class="comment ${dueClass}" id="cm-${c.CommentID}">
     <div class="comment-head">
       <span class="comment-author">${esc(c.Author)}</span>
@@ -576,8 +582,9 @@ function renderComment(c){
       ${actions}
     </div>
     <div class="comment-body">
-      <div class="comment-text">${esc(c.Text)}</div>
+      ${c.Text?`<div class="comment-text">${esc(c.Text)}</div>`:''}
       ${dueTag}
+      ${filesHtml}
     </div>
   </div>`;
 }
@@ -585,13 +592,11 @@ function renderComment(c){
 // ===== קבצים =====
 function renderFile(f){
   const mine = f.UploadedBy===currentUser;
-  const dt = new Date(f.Timestamp).toLocaleDateString('he-IL',{day:'numeric',month:'numeric'});
   const icon = fileIcon(f.FileName);
   const del = mine ? `<button class="fi-del" onclick="deleteFile('${f.FileID}')" title="מחק">🗑</button>` : '';
   return `<div class="file-item">
     <span class="fi-icon">${icon}</span>
     <a class="fi-name" href="${esc(f.Url)}" target="_blank" rel="noopener">${esc(f.FileName)}</a>
-    <span class="fi-meta">${esc(f.UploadedBy)} · ${dt}</span>
     ${del}
   </div>`;
 }
@@ -608,43 +613,96 @@ function fileIcon(name){
 
 const MAX_FILE_BYTES = 5 * 1024 * 1024; // 5MB
 
-function onFilePicked(input){
-  const file = input.files && input.files[0];
-  if(!file) return;
-  const status = document.getElementById('d_fileStatus');
-  status.classList.remove('err');
+// ===== קבצים ממתינים (נבחרו אך טרם הועלו, מצורפים בעת הוספת הערה) =====
+let pendingFiles = [];
 
-  if(file.size > MAX_FILE_BYTES){
-    status.classList.add('err');
-    status.textContent = `הקובץ גדול מדי (${(file.size/1024/1024).toFixed(1)}MB). המקסימום 5MB.`;
-    input.value='';
-    return;
+function onNewFilesPicked(input){
+  const status = document.getElementById('d_newStatus');
+  status.classList.remove('err'); status.textContent='';
+  const files = Array.from(input.files||[]);
+  for(const f of files){
+    if(f.size > MAX_FILE_BYTES){
+      status.classList.add('err');
+      status.textContent = `"${f.name}" גדול מ-5MB ולא נוסף (${(f.size/1024/1024).toFixed(1)}MB)`;
+      continue;
+    }
+    pendingFiles.push(f);
   }
+  input.value=''; // מאפשר לבחור שוב את אותו קובץ אם צריך
+  renderPendingFiles();
+}
 
-  status.textContent = 'מעלה… ⏳';
-  const reader = new FileReader();
-  reader.onload = async ()=>{
-    // reader.result הוא data:...;base64,XXXX — לוקחים רק את החלק אחרי הפסיק
-    const base64 = String(reader.result).split(',')[1];
+function renderPendingFiles(){
+  const box = document.getElementById('d_pendingFiles');
+  box.innerHTML = pendingFiles.map((f,i)=>`<div class="pending-file">
+    <span>${fileIcon(f.name)}</span>
+    <span class="pf-name">${esc(f.name)}</span>
+    <button class="pf-remove" onclick="removePending(${i})" title="הסר">×</button>
+  </div>`).join('');
+}
+
+function removePending(i){
+  pendingFiles.splice(i,1);
+  renderPendingFiles();
+}
+
+// קריאת קובץ והמרתו ל-Base64
+function fileToBase64(file){
+  return new Promise((resolve,reject)=>{
+    const reader = new FileReader();
+    reader.onload = ()=>resolve(String(reader.result).split(',')[1]);
+    reader.onerror = ()=>reject(new Error('קריאת הקובץ נכשלה'));
+    reader.readAsDataURL(file);
+  });
+}
+
+// העלאת קובץ בודד המקושר להערה
+async function uploadOneFile(file, commentId, notifyFile){
+  const base64 = await fileToBase64(file);
+  return apiPost('uploadFile', {
+    taskId: currentTaskId,
+    commentId: commentId,
+    fileName: file.name,
+    mimeType: file.type || 'application/octet-stream',
+    data: base64,
+    uploadedBy: currentUser,
+    notifyFile: notifyFile ? '1' : '0'
+  });
+}
+
+// צירוף קבצים להערה קיימת
+function attachToComment(commentId){
+  // input זמני לבחירת קבצים
+  const input = document.createElement('input');
+  input.type='file'; input.multiple=true;
+  input.onchange = async ()=>{
+    const files = Array.from(input.files||[]);
+    if(!files.length) return;
+    const status = document.getElementById('d_newStatus');
+    status.classList.remove('err');
+    // בדיקת גודל
+    const tooBig = files.filter(f=>f.size>MAX_FILE_BYTES);
+    const ok = files.filter(f=>f.size<=MAX_FILE_BYTES);
+    if(tooBig.length){
+      status.classList.add('err');
+      status.textContent = tooBig.map(f=>`"${f.name}" גדול מ-5MB`).join(' · ');
+    }
+    if(!ok.length) return;
+    toast('מעלה קבצים…');
     try{
-      const r = await apiPost('uploadFile', {
-        taskId: currentTaskId,
-        fileName: file.name,
-        mimeType: file.type || 'application/octet-stream',
-        data: base64,
-        uploadedBy: currentUser
-      });
-      if(r.error){ status.classList.add('err'); status.textContent = r.error; return; }
-      status.textContent = 'הקובץ הועלה ✓';
+      for(let i=0;i<ok.length;i++){
+        // מייל רק על הקובץ הראשון, כדי לא להציף
+        const r = await uploadOneFile(ok[i], commentId, i===0);
+        if(r.error){ toast(r.error); }
+      }
       await load();
       openDetail(currentTaskId);
+      toast('הקבצים צורפו');
     }catch(e){
-      status.classList.add('err');
-      status.textContent = 'שגיאה בהעלאה: ' + e.message;
+      toast('שגיאה: ' + e.message);
     }
   };
-  reader.onerror = ()=>{ status.classList.add('err'); status.textContent='שגיאה בקריאת הקובץ'; };
-  reader.readAsDataURL(file);
+  input.click();
 }
 
 async function deleteFile(id){
@@ -700,14 +758,46 @@ async function deleteComment(id){
 async function postComment(){
   const text = document.getElementById('d_newComment').value.trim();
   const dueDate = document.getElementById('d_newDue').value;
-  if(!text) return;
+  const status = document.getElementById('d_newStatus');
+  status.classList.remove('err');
+
+  // צריך לפחות טקסט או קובץ אחד
+  if(!text && pendingFiles.length===0){
+    status.classList.add('err');
+    status.textContent = 'צריך לכתוב הערה או לצרף קובץ';
+    return;
+  }
+
+  const filesToUpload = pendingFiles.slice();
+  // איפוס השדות מיד לחוויה חלקה
   document.getElementById('d_newComment').value='';
   document.getElementById('d_newDue').value='';
-  toast('שולח…');
-  await api('addComment', {taskId:currentTaskId, author:currentUser, text, dueDate});
-  await load();
-  openDetail(currentTaskId); // רענון התצוגה
-  toast('העדכון נוסף');
+  pendingFiles = [];
+  renderPendingFiles();
+
+  try{
+    status.textContent = filesToUpload.length ? 'שולח הערה ומעלה קבצים…' : 'שולח…';
+    // 1. יצירת ההערה — מחזירה CommentID
+    const r = await api('addComment', {
+      taskId:currentTaskId, author:currentUser, text, dueDate,
+      fileCount: String(filesToUpload.length)
+    });
+    if(r.error){ status.classList.add('err'); status.textContent = r.error; return; }
+    const commentId = r.id;
+
+    // 2. העלאת הקבצים המקושרים להערה (בלי מייל נפרד — כבר נשלח ב-addComment)
+    for(const f of filesToUpload){
+      const fr = await uploadOneFile(f, commentId, false);
+      if(fr.error) toast('שגיאה בקובץ "'+f.name+'": '+fr.error);
+    }
+
+    await load();
+    openDetail(currentTaskId); // רענון התצוגה
+    toast('העדכון נוסף');
+  }catch(e){
+    status.classList.add('err');
+    status.textContent = 'שגיאה: ' + e.message;
+  }
 }
 
 async function deleteCurrent(){
