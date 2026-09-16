@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="he" dir="rtl">
 <head>
@@ -79,6 +78,9 @@
   .card-meta .cm{display:flex;align-items:center;gap:4px}
   .prio-high{color:var(--danger);font-weight:600}
   .ccount{margin-inline-start:auto;font-size:12px;color:var(--muted)}
+  .last-update{margin-top:10px;padding-top:9px;border-top:1px dashed var(--line)}
+  .last-update .lu-label{display:block;font-size:11px;font-weight:600;color:var(--accent);margin-bottom:2px}
+  .last-update .lu-text{display:block;font-size:13px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
   .overdue{color:var(--danger);font-weight:600}
 
   .empty{text-align:center;color:var(--muted);padding:50px 20px;font-size:15px}
@@ -254,7 +256,7 @@
 
 <script>
 // ===== הגדרות =====
-const APP_VERSION = '170826-1310';   // חותמת גרסה (DDMMYY-HHMM שעון ירושלים)
+const APP_VERSION = '180826-1030';   // חותמת גרסה (DDMMYY-HHMM שעון ירושלים)
 const CONFIG = {
   API_URL: 'https://script.google.com/macros/s/AKfycbzpzvD_HpxTRMC-eSkr4eY1XKJ9aIEOmuR9x9TkjohLsRXioJff6XNKr894Q2Y_MxB6/exec',   // כתובת ה-Web app מ-Apps Script
   USERS: ['עופר','רפי'],
@@ -372,9 +374,22 @@ function render(){
 
   el.innerHTML = list.map(t=>{
     const sc = STATUS_CLASS[t.Status]||'open';
-    const cn = (t.comments||[]).length;
+    const comments = t.comments||[];
+    const cn = comments.length;
     const due = fmtDue(t.DueDate, t.Status);
     const prio = t.Priority==='גבוהה' ? '<span class="cm prio-high">● עדיפות גבוהה</span>' : '';
+    // העדכון האחרון — ההערה האחרונה שנוספה (הרשימה ממוינת כרונולוגית)
+    let lastUpdate = '';
+    if(cn){
+      const last = comments[cn-1];
+      const when = new Date(last.Timestamp).toLocaleDateString('he-IL',{day:'numeric',month:'numeric'});
+      const txt = (last.Text||'').replace(/\s+/g,' ').trim();
+      const short = txt.length>90 ? txt.slice(0,90)+'…' : txt;
+      lastUpdate = `<div class="last-update">
+        <span class="lu-label">עדכון אחרון · ${esc(last.Author)} · ${when}</span>
+        <span class="lu-text">${esc(short)}</span>
+      </div>`;
+    }
     return `<div class="card s-${sc}" onclick="openDetail('${t.TaskID}')">
       <div class="card-top">
         <div class="card-title">${esc(t.Title)}</div>
@@ -386,6 +401,7 @@ function render(){
         ${prio}
         ${cn?`<span class="ccount">💬 ${cn}</span>`:''}
       </div>
+      ${lastUpdate}
     </div>`;
   }).join('');
 }
