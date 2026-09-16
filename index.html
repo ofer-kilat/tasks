@@ -116,6 +116,19 @@
   .detail-desc{font-size:14px;color:var(--text);white-space:pre-wrap;margin-bottom:6px}
   .detail-meta{display:flex;gap:16px;flex-wrap:wrap;font-size:12.5px;color:var(--muted);margin:12px 0;padding-bottom:14px;border-bottom:1px solid var(--line)}
   .thread-title{font-size:14px;font-weight:600;margin:4px 0 12px}
+  .files-section{margin-bottom:18px;padding-bottom:16px;border-bottom:1px solid var(--line)}
+  .file-item{display:flex;align-items:center;gap:8px;background:var(--bg);border-radius:8px;padding:8px 11px;margin-bottom:7px}
+  .file-item .fi-icon{font-size:16px}
+  .file-item .fi-name{flex:1;font-size:13.5px;color:var(--text);text-decoration:none;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .file-item .fi-name:hover{color:var(--accent);text-decoration:underline}
+  .file-item .fi-meta{font-size:11.5px;color:var(--muted)}
+  .file-item .fi-del{background:none;border:none;cursor:pointer;color:var(--muted);font-size:14px;padding:2px 5px}
+  .file-item .fi-del:hover{color:var(--danger)}
+  .no-files{font-size:13px;color:var(--muted);padding:4px 0 8px}
+  .add-file{display:flex;align-items:center;gap:10px;margin-top:6px;flex-wrap:wrap}
+  .file-hint{font-size:12px;color:var(--muted)}
+  .file-status{font-size:12.5px;color:var(--accent);font-weight:600}
+  .file-status.err{color:var(--danger)}
   .comment{background:var(--bg);border-radius:9px;padding:10px 12px;margin-bottom:9px}
   .comment.has-due{border-inline-start:3px solid var(--progress)}
   .comment.due-overdue{border-inline-start-color:var(--danger)}
@@ -231,6 +244,18 @@
     <div class="modal-body">
       <div class="detail-desc" id="d_desc"></div>
       <div class="detail-meta" id="d_meta"></div>
+
+      <div class="files-section">
+        <div class="thread-title">קבצים מצורפים</div>
+        <div id="d_files"></div>
+        <div class="add-file">
+          <input type="file" id="d_fileInput" style="display:none" onchange="onFilePicked(this)">
+          <button class="btn ghost" onclick="document.getElementById('d_fileInput').click()">📎 הוסף קובץ</button>
+          <span class="file-hint">עד 5MB לקובץ</span>
+          <span id="d_fileStatus" class="file-status"></span>
+        </div>
+      </div>
+
       <div class="thread-title">עדכונים והערות</div>
       <div id="d_comments"></div>
       <div class="add-comment">
@@ -256,7 +281,7 @@
 
 <script>
 // ===== הגדרות =====
-const APP_VERSION = '180826-1030';   // חותמת גרסה (DDMMYY-HHMM שעון ירושלים)
+const APP_VERSION = '160926-1115';   // חותמת גרסה (DDMMYY-HHMM שעון ירושלים)
 const CONFIG = {
   API_URL: 'https://script.google.com/macros/s/AKfycbzpzvD_HpxTRMC-eSkr4eY1XKJ9aIEOmuR9x9TkjohLsRXioJff6XNKr894Q2Y_MxB6/exec',   // כתובת ה-Web app מ-Apps Script
   USERS: ['עופר','רפי'],
@@ -266,7 +291,7 @@ const CONFIG = {
 const STATUS_CLASS = {'פתוח':'open','בתהליך':'progress','ממתין':'wait','הושלם':'done'};
 let TASKS = [];
 let currentUser = localStorage.getItem('taskUser') || CONFIG.USERS[0];
-let activeFilter = 'all';
+let activeFilter = 'open';
 let searchTerm = '';
 let currentTaskId = null;
 
@@ -322,6 +347,19 @@ async function api(action, params={}){
   return res.json();
 }
 
+// שליחת POST לנתונים גדולים (העלאת קובץ). text/plain כדי להימנע מ-preflight.
+async function apiPost(action, params={}){
+  const body = new URLSearchParams();
+  body.set('action', action);
+  Object.keys(params).forEach(k=>body.set(k, params[k]));
+  const res = await fetch(CONFIG.API_URL, {
+    method:'POST',
+    headers:{'Content-Type':'text/plain;charset=utf-8'},
+    body: body.toString()
+  });
+  return res.json();
+}
+
 async function load(){
   try{
     const data = await api('list');
@@ -349,6 +387,12 @@ function openFromUrl(){
 // ===== רינדור הרשימה =====
 function render(){
   let list = TASKS.slice();
+  // מיון לפי עדכון אחרון — הכי מעודכן קודם (נופל חזרה לתאריך יצירה אם חסר)
+  list.sort((a,b)=>{
+    const ta = new Date(a.UpdatedAt || a.CreatedAt || 0);
+    const tb = new Date(b.UpdatedAt || b.CreatedAt || 0);
+    return tb - ta;
+  });
   if(activeFilter==='open')  list = list.filter(t=>t.Status!=='הושלם');
   if(activeFilter==='done')  list = list.filter(t=>t.Status==='הושלם');
   if(activeFilter==='mine')  list = list.filter(t=>t.Assignee===currentUser);
@@ -399,6 +443,7 @@ function render(){
         <span class="cm">👤 ${esc(t.Assignee||'—')}</span>
         ${due}
         ${prio}
+        ${(t.files&&t.files.length)?`<span class="cm">📎 ${t.files.length}</span>`:''}
         ${cn?`<span class="ccount">💬 ${cn}</span>`:''}
       </div>
       ${lastUpdate}
@@ -489,6 +534,14 @@ function openDetail(id){
     ? comments.map(c=>renderComment(c)).join('')
     : '<div class="no-comments">אין עדכונים עדיין</div>';
 
+  // קבצים מצורפים
+  const files = t.files||[];
+  document.getElementById('d_files').innerHTML = files.length
+    ? files.map(f=>renderFile(f)).join('')
+    : '<div class="no-files">אין קבצים מצורפים</div>';
+  document.getElementById('d_fileStatus').textContent='';
+  document.getElementById('d_fileInput').value='';
+
   document.getElementById('d_newComment').value='';
   document.getElementById('d_newDue').value='';
   // כפתור מחיקה — רק למשתמש המורשה
@@ -527,6 +580,81 @@ function renderComment(c){
       ${dueTag}
     </div>
   </div>`;
+}
+
+// ===== קבצים =====
+function renderFile(f){
+  const mine = f.UploadedBy===currentUser;
+  const dt = new Date(f.Timestamp).toLocaleDateString('he-IL',{day:'numeric',month:'numeric'});
+  const icon = fileIcon(f.FileName);
+  const del = mine ? `<button class="fi-del" onclick="deleteFile('${f.FileID}')" title="מחק">🗑</button>` : '';
+  return `<div class="file-item">
+    <span class="fi-icon">${icon}</span>
+    <a class="fi-name" href="${esc(f.Url)}" target="_blank" rel="noopener">${esc(f.FileName)}</a>
+    <span class="fi-meta">${esc(f.UploadedBy)} · ${dt}</span>
+    ${del}
+  </div>`;
+}
+
+function fileIcon(name){
+  const n=(name||'').toLowerCase();
+  if(/\.(png|jpe?g|gif|webp|bmp|heic)$/.test(n)) return '🖼️';
+  if(/\.pdf$/.test(n)) return '📄';
+  if(/\.(xlsx?|csv)$/.test(n)) return '📊';
+  if(/\.(docx?)$/.test(n)) return '📝';
+  if(/\.(zip|rar|7z)$/.test(n)) return '🗜️';
+  return '📎';
+}
+
+const MAX_FILE_BYTES = 5 * 1024 * 1024; // 5MB
+
+function onFilePicked(input){
+  const file = input.files && input.files[0];
+  if(!file) return;
+  const status = document.getElementById('d_fileStatus');
+  status.classList.remove('err');
+
+  if(file.size > MAX_FILE_BYTES){
+    status.classList.add('err');
+    status.textContent = `הקובץ גדול מדי (${(file.size/1024/1024).toFixed(1)}MB). המקסימום 5MB.`;
+    input.value='';
+    return;
+  }
+
+  status.textContent = 'מעלה… ⏳';
+  const reader = new FileReader();
+  reader.onload = async ()=>{
+    // reader.result הוא data:...;base64,XXXX — לוקחים רק את החלק אחרי הפסיק
+    const base64 = String(reader.result).split(',')[1];
+    try{
+      const r = await apiPost('uploadFile', {
+        taskId: currentTaskId,
+        fileName: file.name,
+        mimeType: file.type || 'application/octet-stream',
+        data: base64,
+        uploadedBy: currentUser
+      });
+      if(r.error){ status.classList.add('err'); status.textContent = r.error; return; }
+      status.textContent = 'הקובץ הועלה ✓';
+      await load();
+      openDetail(currentTaskId);
+    }catch(e){
+      status.classList.add('err');
+      status.textContent = 'שגיאה בהעלאה: ' + e.message;
+    }
+  };
+  reader.onerror = ()=>{ status.classList.add('err'); status.textContent='שגיאה בקריאת הקובץ'; };
+  reader.readAsDataURL(file);
+}
+
+async function deleteFile(id){
+  if(!confirm('למחוק את הקובץ המצורף?')) return;
+  toast('מוחק…');
+  const r = await api('deleteFile', {fileId:id, actor:currentUser});
+  if(r.error){ toast(r.error); return; }
+  await load();
+  openDetail(currentTaskId);
+  toast('הקובץ נמחק');
 }
 
 // מעבר למצב עריכה של הערה
